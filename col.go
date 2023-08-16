@@ -524,6 +524,49 @@ func (f *File) SetColWidth(sheet, startCol, endCol string, width float64) error 
 	return err
 }
 
+func (f *File) SetColWidthByCoordinates(sheet string, startCol, endCol int, width float64) error {
+	min := startCol
+	max := endCol
+	if startCol > endCol {
+		max = startCol
+		min = endCol
+	}
+	if width > MaxColumnWidth {
+		return ErrColumnWidth
+	}
+	f.mu.Lock()
+	ws, err := f.workSheetReader(sheet)
+	if err != nil {
+		f.mu.Unlock()
+		return err
+	}
+	f.mu.Unlock()
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	col := xlsxCol{
+		Min:         min,
+		Max:         max,
+		Width:       float64Ptr(width),
+		CustomWidth: true,
+	}
+	if ws.Cols == nil {
+		cols := xlsxCols{}
+		cols.Col = append(cols.Col, col)
+		ws.Cols = &cols
+		return err
+	}
+	ws.Cols.Col = flatCols(col, ws.Cols.Col, func(fc, c xlsxCol) xlsxCol {
+		fc.BestFit = c.BestFit
+		fc.Collapsed = c.Collapsed
+		fc.Hidden = c.Hidden
+		fc.OutlineLevel = c.OutlineLevel
+		fc.Phonetic = c.Phonetic
+		fc.Style = c.Style
+		return fc
+	})
+	return err
+}
+
 // flatCols provides a method for the column's operation functions to flatten
 // and check the worksheet columns.
 func flatCols(col xlsxCol, cols []xlsxCol, replacer func(fc, c xlsxCol) xlsxCol) []xlsxCol {

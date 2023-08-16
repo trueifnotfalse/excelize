@@ -11,7 +11,9 @@
 
 package excelize
 
-import "strings"
+import (
+	"strings"
+)
 
 // Rect gets merged cell rectangle coordinates sequence.
 func (mc *xlsxMergeCell) Rect() ([]int, error) {
@@ -59,6 +61,29 @@ func (f *File) MergeCell(sheet, hCell, vCell string) error {
 
 	hCell, _ = CoordinatesToCellName(rect[0], rect[1])
 	vCell, _ = CoordinatesToCellName(rect[2], rect[3])
+
+	ws, err := f.workSheetReader(sheet)
+	if err != nil {
+		return err
+	}
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	ref := hCell + ":" + vCell
+	if ws.MergeCells != nil {
+		ws.MergeCells.Cells = append(ws.MergeCells.Cells, &xlsxMergeCell{Ref: ref, rect: rect})
+	} else {
+		ws.MergeCells = &xlsxMergeCells{Cells: []*xlsxMergeCell{{Ref: ref, rect: rect}}}
+	}
+	ws.MergeCells.Count = len(ws.MergeCells.Cells)
+	return err
+}
+
+func (f *File) MergeCellByCoordinates(sheet string, hhCol, hRow, vCol, vRow int) error {
+	rect := []int{hhCol, hRow, vCol, vRow}
+	_ = sortCoordinates(rect)
+
+	hCell, _ := CoordinatesToCellName(rect[0], rect[1])
+	vCell, _ := CoordinatesToCellName(rect[2], rect[3])
 
 	ws, err := f.workSheetReader(sheet)
 	if err != nil {

@@ -307,6 +307,26 @@ func (f *File) SetCellInt(sheet, cell string, value int) error {
 	return f.removeFormula(c, ws, sheet)
 }
 
+func (f *File) SetCellIntByCoordinates(sheet string, col, row, value int) error {
+	f.mu.Lock()
+	ws, err := f.workSheetReader(sheet)
+	if err != nil {
+		f.mu.Unlock()
+		return err
+	}
+	f.mu.Unlock()
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	c, col, row, err := ws.prepareCellByCoordinates(col, row)
+	if err != nil {
+		return err
+	}
+	c.S = ws.prepareCellStyle(col, row, c.S)
+	c.T, c.V = setCellInt(value)
+	c.IS = nil
+	return f.removeFormula(c, ws, sheet)
+}
+
 // setCellInt prepares cell type and string type cell value by a given
 // integer.
 func setCellInt(value int) (t string, v string) {
@@ -407,6 +427,28 @@ func (f *File) SetCellStr(sheet, cell, value string) error {
 	return f.removeFormula(c, ws, sheet)
 }
 
+func (f *File) SetCellStrByCoordinates(sheet string, col, row int, value string) error {
+	f.mu.Lock()
+	ws, err := f.workSheetReader(sheet)
+	if err != nil {
+		f.mu.Unlock()
+		return err
+	}
+	f.mu.Unlock()
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	c, col, row, err := ws.prepareCellByCoordinates(col, row)
+	if err != nil {
+		return err
+	}
+	c.S = ws.prepareCellStyle(col, row, c.S)
+	if c.T, c.V, err = f.setCellString(value); err != nil {
+		return err
+	}
+	c.IS = nil
+	return f.removeFormula(c, ws, sheet)
+}
+
 // setCellString provides a function to set string type to shared string
 // table.
 func (f *File) setCellString(value string) (t, v string, err error) {
@@ -430,7 +472,7 @@ func (f *File) sharedStringsLoader() (err error) {
 	if path, ok := f.tempFiles.Load(defaultXMLPathSharedStrings); ok {
 		f.Pkg.Store(defaultXMLPathSharedStrings, f.readBytes(defaultXMLPathSharedStrings))
 		f.tempFiles.Delete(defaultXMLPathSharedStrings)
-		if err = os.Remove(path.(string)); err != nil {
+		if err = os.RemoveAll(path.(string)); err != nil {
 			return
 		}
 		f.SharedStrings = nil
@@ -440,7 +482,7 @@ func (f *File) sharedStringsLoader() (err error) {
 			return err
 		}
 		f.tempFiles.Delete(defaultTempFileSST)
-		f.sharedStringItem, err = nil, os.Remove(f.sharedStringTemp.Name())
+		f.sharedStringItem, err = nil, os.RemoveAll(f.sharedStringTemp.Name())
 		f.sharedStringTemp = nil
 	}
 	return
@@ -1284,6 +1326,17 @@ func (ws *xlsxWorksheet) prepareCell(cell string) (*xlsxC, int, int, error) {
 	return &ws.SheetData.Row[row-1].C[col-1], col, row, err
 }
 
+func (ws *xlsxWorksheet) prepareCellByCoordinates(col, row int) (*xlsxC, int, int, error) {
+	var err error
+	col, row, err = ws.mergeCellsParserByCoordinates(col, row)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	ws.prepareSheetXML(col, row)
+	return &ws.SheetData.Row[row-1].C[col-1], col, row, err
+}
+
 // getCellStringFunc does common value extraction workflow for all get cell
 // value function. Passed function implements specific part of required
 // logic.
@@ -1442,6 +1495,34 @@ func (ws *xlsxWorksheet) mergeCellsParser(cell string) (string, error) {
 		}
 	}
 	return cell, nil
+}
+
+func (ws *xlsxWorksheet) mergeCellsParserByCoordinates(col, row int) (int, int, error) {
+	if ws.MergeCells != nil {
+		for i := 0; i < len(ws.MergeCells.Cells); i++ {
+			if ws.MergeCells.Cells[i] == nil {
+				ws.MergeCells.Cells = append(ws.MergeCells.Cells[:i], ws.MergeCells.Cells[i+1:]...)
+				i--
+				continue
+			}
+			if ref := ws.MergeCells.Cells[i].Ref; len(ws.MergeCells.Cells[i].rect) == 0 && ref != "" {
+				if strings.Count(ref, ":") != 1 {
+					ref += ":" + ref
+				}
+				rect, err := rangeRefToCoordinates(ref)
+				if err != nil {
+					return col, row, err
+				}
+				_ = sortCoordinates(rect)
+				ws.MergeCells.Cells[i].rect = rect
+			}
+			if cellInRange([]int{col, row}, ws.MergeCells.Cells[i].rect) {
+				cell := strings.Split(ws.MergeCells.Cells[i].Ref, ":")[0]
+				return CellNameToCoordinates(cell)
+			}
+		}
+	}
+	return col, row, nil
 }
 
 // checkCellInRangeRef provides a function to determine if a given cell reference

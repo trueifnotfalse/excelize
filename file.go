@@ -91,7 +91,7 @@ func (f *File) Close() error {
 		}
 	}
 	f.tempFiles.Range(func(k, v interface{}) bool {
-		if err = os.Remove(v.(string)); err != nil {
+		if err = os.RemoveAll(v.(string)); err != nil {
 			return false
 		}
 		return true

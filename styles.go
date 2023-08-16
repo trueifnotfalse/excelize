@@ -1789,6 +1789,51 @@ func (f *File) SetCellStyle(sheet, hCell, vCell string, styleID int) error {
 	return err
 }
 
+func (f *File) SetCellStyleByCoordinates(sheet string, hCol, hRow, vCol, vRow, styleID int) error {
+	if vCol < hCol {
+		vCol, hCol = hCol, vCol
+	}
+
+	if vRow < hRow {
+		vRow, hRow = hRow, vRow
+	}
+
+	hColIdx := hCol - 1
+	hRowIdx := hRow - 1
+
+	vColIdx := vCol - 1
+	vRowIdx := vRow - 1
+	f.mu.Lock()
+	ws, err := f.workSheetReader(sheet)
+	if err != nil {
+		f.mu.Unlock()
+		return err
+	}
+	s, err := f.stylesReader()
+	if err != nil {
+		f.mu.Unlock()
+		return err
+	}
+	f.mu.Unlock()
+
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+
+	ws.prepareSheetXML(vCol, vRow)
+	ws.makeContiguousColumns(hRow, vRow, vCol)
+
+	if styleID < 0 || s.CellXfs == nil || len(s.CellXfs.Xf) <= styleID {
+		return newInvalidStyleID(styleID)
+	}
+
+	for r := hRowIdx; r <= vRowIdx; r++ {
+		for k := hColIdx; k <= vColIdx; k++ {
+			ws.SheetData.Row[r].C[k].S = styleID
+		}
+	}
+	return err
+}
+
 // SetConditionalFormat provides a function to create conditional formatting
 // rule for cell value. Conditional formatting is a feature of Excel which
 // allows you to apply a format to a cell or a range of cells based on certain
