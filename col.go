@@ -372,6 +372,44 @@ func (f *File) parseColRange(columns string) (minVal, maxVal int, err error) {
 	return
 }
 
+// SetColOutlineLevelByColumnNumber provides a function to set outline level of a single
+// column by given worksheet name and column name. The value of parameter
+// 'level' is 1-7. For example, set outline level of column 3 in Sheet1 to 2:
+//
+//	err := f.SetColOutlineLevelByColumnNumber("Sheet1", 3, 2)
+func (f *File) SetColOutlineLevelByColumnNumber(sheet string, colNum int, level uint8) error {
+	if level > 7 || level < 1 {
+		return ErrOutlineLevel
+	}
+	colData := xlsxCol{
+		Min:          colNum,
+		Max:          colNum,
+		OutlineLevel: level,
+		CustomWidth:  true,
+	}
+	ws, err := f.workSheetReader(sheet)
+	if err != nil {
+		return err
+	}
+	if ws.Cols == nil {
+		cols := xlsxCols{}
+		cols.Col = append(cols.Col, colData)
+		ws.Cols = &cols
+		return err
+	}
+	ws.Cols.Col = flatCols(colData, ws.Cols.Col, func(fc, c xlsxCol) xlsxCol {
+		fc.BestFit = c.BestFit
+		fc.Collapsed = c.Collapsed
+		fc.CustomWidth = c.CustomWidth
+		fc.Hidden = c.Hidden
+		fc.Phonetic = c.Phonetic
+		fc.Style = c.Style
+		fc.Width = c.Width
+		return fc
+	})
+	return err
+}
+
 // SetColOutlineLevel provides a function to set outline level of a single
 // column by given worksheet name and column name. The value of parameter
 // 'level' is 1-7. For example, set outline level of column D in Sheet1 to 2:
