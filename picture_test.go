@@ -42,6 +42,16 @@ func TestAddPicture(t *testing.T) {
 	assert.NoError(t, f.AddPicture("Sheet1", "F21", filepath.Join("test", "images", "excel.jpg"),
 		&GraphicOptions{OffsetX: 10, OffsetY: 10, Hyperlink: "https://github.com/xuri/excelize", HyperlinkType: "External", Positioning: "oneCell"}))
 
+	// Test add pictures to single cell with offsets
+	assert.NoError(t, f.AddPicture("Sheet2", "K22", filepath.Join("test", "images", "excel.jpg"),
+		&GraphicOptions{Positioning: "oneCell"}))
+	assert.NoError(t, f.AddPicture("Sheet2", "K22", filepath.Join("test", "images", "excel.jpg"),
+		&GraphicOptions{OffsetX: 200, Positioning: "oneCell"}))
+	assert.NoError(t, f.AddPicture("Sheet2", "K22", filepath.Join("test", "images", "excel.jpg"),
+		&GraphicOptions{OffsetX: 400, Positioning: "oneCell"}))
+	assert.NoError(t, f.AddPicture("Sheet2", "K22", filepath.Join("test", "images", "excel.jpg"),
+		&GraphicOptions{OffsetX: 600, Positioning: "oneCell"}))
+
 	file, err := os.ReadFile(filepath.Join("test", "images", "excel.png"))
 	assert.NoError(t, err)
 
@@ -83,7 +93,7 @@ func TestAddPicture(t *testing.T) {
 	// Test get picture cells
 	cells, err := f.GetPictureCells("Sheet1")
 	assert.NoError(t, err)
-	assert.Equal(t, []string{"F21", "A30", "B30", "C30", "Q1", "Q8", "Q15", "Q22", "Q28"}, cells)
+	assert.Equal(t, []string{"A30", "B30", "C30", "Q1", "Q8", "Q15", "Q22", "Q28", "F21"}, cells)
 	assert.NoError(t, f.Close())
 
 	f, err = OpenFile(filepath.Join("test", "TestAddPicture1.xlsx"))
@@ -92,7 +102,7 @@ func TestAddPicture(t *testing.T) {
 	f.Drawings.Delete(path)
 	cells, err = f.GetPictureCells("Sheet1")
 	assert.NoError(t, err)
-	assert.Equal(t, []string{"F21", "A30", "B30", "C30", "Q1", "Q8", "Q15", "Q22", "Q28"}, cells)
+	assert.Equal(t, []string{"A30", "B30", "C30", "Q1", "Q8", "Q15", "Q22", "Q28", "F21"}, cells)
 	// Test get picture cells with unsupported charset
 	f.Drawings.Delete(path)
 	f.Pkg.Store(path, MacintoshCyrillicCharset)
@@ -290,7 +300,8 @@ func TestAddDrawingPicture(t *testing.T) {
 	opts := &GraphicOptions{PrintObject: boolPtr(true), Locked: boolPtr(false)}
 	assert.EqualError(t, f.addDrawingPicture("sheet1", "", "A", "", 0, 0, image.Config{}, opts), newCellNameToCoordinatesError("A", newInvalidCellNameError("A")).Error())
 	// Test addDrawingPicture with invalid positioning types
-	assert.Equal(t, f.addDrawingPicture("sheet1", "", "A1", "", 0, 0, image.Config{}, &GraphicOptions{Positioning: "x"}), ErrParameterInvalid)
+	assert.Equal(t, newInvalidOptionalValue("Positioning", "x", supportedPositioning),
+		f.addDrawingPicture("sheet1", "", "A1", "", 0, 0, image.Config{}, &GraphicOptions{Positioning: "x"}))
 
 	path := "xl/drawings/drawing1.xml"
 	f.Pkg.Store(path, MacintoshCyrillicCharset)

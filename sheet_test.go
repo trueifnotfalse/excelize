@@ -418,8 +418,8 @@ func TestGetSheetName(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "Sheet1", f.GetSheetName(0))
 	assert.Equal(t, "Sheet2", f.GetSheetName(1))
-	assert.Equal(t, "", f.GetSheetName(-1))
-	assert.Equal(t, "", f.GetSheetName(2))
+	assert.Empty(t, f.GetSheetName(-1))
+	assert.Empty(t, f.GetSheetName(2))
 	assert.NoError(t, f.Close())
 }
 
@@ -481,6 +481,8 @@ func TestSetSheetName(t *testing.T) {
 	assert.Equal(t, "sheet1", f.GetSheetName(0))
 	// Test set sheet name with invalid sheet name
 	assert.Equal(t, f.SetSheetName("Sheet:1", "Sheet1"), ErrSheetNameInvalid)
+	_, err := f.NewSheet("Sheet 3")
+	assert.NoError(t, err)
 
 	// Test set worksheet name with existing defined name and auto filter
 	assert.NoError(t, f.AutoFilter("Sheet1", "A1:A2", nil))
@@ -496,8 +498,12 @@ func TestSetSheetName(t *testing.T) {
 		Name:     "Name3",
 		RefersTo: "Sheet1!$A$1:'Sheet1'!A1:Sheet1!$A$1,Sheet1!A1:Sheet3!A1,Sheet3!A1",
 	}))
-	assert.NoError(t, f.SetSheetName("Sheet1", "Sheet2"))
-	for i, expected := range []string{"'Sheet2'!$A$1:$A$2", "$B$2", "$A1$2:A2", "Sheet2!$A$1:'Sheet2'!A1:Sheet2!$A$1,Sheet2!A1:Sheet3!A1,Sheet3!A1"} {
+	assert.NoError(t, f.SetDefinedName(&DefinedName{
+		Name:     "Name4",
+		RefersTo: "'Sheet 3'!$A1$2:A2",
+	}))
+	assert.NoError(t, f.SetSheetName("Sheet1", "Sheet 2"))
+	for i, expected := range []string{"'Sheet 2'!$A$1:$A$2", "$B$2", "$A1$2:A2", "'Sheet 2'!$A$1:'Sheet 2'!A1:'Sheet 2'!$A$1,'Sheet 2'!A1:Sheet3!A1,Sheet3!A1", "'Sheet 3'!$A1$2:A2"} {
 		assert.Equal(t, expected, f.WorkBook.DefinedNames.DefinedName[i].Data)
 	}
 }
@@ -519,7 +525,7 @@ func TestWorksheetWriter(t *testing.T) {
 func TestGetWorkbookPath(t *testing.T) {
 	f := NewFile()
 	f.Pkg.Delete("_rels/.rels")
-	assert.Equal(t, "", f.getWorkbookPath())
+	assert.Empty(t, f.getWorkbookPath())
 }
 
 func TestGetWorkbookRelsPath(t *testing.T) {
@@ -675,7 +681,7 @@ func BenchmarkNewSheet(b *testing.B) {
 func newSheetWithSet() {
 	file := NewFile()
 	for i := 0; i < 1000; i++ {
-		_ = file.SetCellInt("Sheet1", "A"+strconv.Itoa(i+1), i)
+		_ = file.SetCellInt("Sheet1", "A"+strconv.Itoa(i+1), int64(i))
 	}
 	file = nil
 }
@@ -691,7 +697,7 @@ func BenchmarkFile_SaveAs(b *testing.B) {
 func newSheetWithSave() {
 	file := NewFile()
 	for i := 0; i < 1000; i++ {
-		_ = file.SetCellInt("Sheet1", "A"+strconv.Itoa(i+1), i)
+		_ = file.SetCellInt("Sheet1", "A"+strconv.Itoa(i+1), int64(i))
 	}
 	_ = file.Save()
 }
@@ -786,7 +792,7 @@ func TestSheetDimension(t *testing.T) {
 	assert.NoError(t, err)
 	dimension, err = f.GetSheetDimension(sheetName)
 	assert.NoError(t, err)
-	assert.Equal(t, "", dimension)
+	assert.Empty(t, dimension)
 	// Test set the worksheet dimension
 	for _, excepted := range []string{"A1", "A1:D5", "A1:XFD1048576", "a1", "A1:d5"} {
 		err = f.SetSheetDimension(sheetName, excepted)

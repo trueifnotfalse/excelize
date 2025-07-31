@@ -895,6 +895,9 @@ func TestCalcCellValue(t *testing.T) {
 		"=1+SUM(SUM(1,2*3),4)*4/3+5+(4+2)*3":  "38.6666666666667",
 		"=SUM(1+ROW())":                       "2",
 		"=SUM((SUM(2))+1)":                    "3",
+		"=IF(2<0, 1, (4))":                    "4",
+		"=IF(2>0, (1), 4)":                    "1",
+		"=IF(2>0, (A1)*2.5, 4)":               "2.5",
 		"=SUM({1,2,3,4,\"\"})":                "10",
 		// SUMIF
 		"=SUMIF(F1:F5, \"\")":             "0",
@@ -6298,6 +6301,43 @@ func TestCalcLogBeta(t *testing.T) {
 
 func TestCalcBetainvProbIterator(t *testing.T) {
 	assert.Equal(t, 1.0, betainvProbIterator(1, 1, 1, 1, 1, 1, 1, 1, 1))
+}
+
+func TestCalcRangeResolver(t *testing.T) {
+	f := NewFile()
+	assert.NoError(t, f.SetCellFormula("Sheet1", "A1", "=SUM(Sheet1!B:B)"))
+	cellRefs := list.New()
+	cellRanges := list.New()
+	// Test extract value from ranges on invalid ranges
+	cellRanges.PushBack(cellRange{
+		From: cellRef{Col: 1, Row: 1, Sheet: "SheetN"},
+		To:   cellRef{Col: 1, Row: TotalRows, Sheet: "SheetN"},
+	})
+	_, err := f.rangeResolver(&calcContext{}, cellRefs, cellRanges)
+	assert.EqualError(t, err, "sheet SheetN does not exist")
+
+	ws, err := f.workSheetReader("Sheet1")
+	ws.SheetData.Row = make([]xlsxRow, TotalRows+1)
+	ws.SheetData.Row[TotalRows].C = make([]xlsxC, 3)
+	assert.NoError(t, err)
+	cellRanges.Init()
+	cellRanges.PushBack(cellRange{
+		From: cellRef{Col: 3, Row: TotalRows, Sheet: "Sheet1"},
+		To:   cellRef{Col: 3, Row: TotalRows + 1, Sheet: "Sheet1"},
+	})
+	_, err = f.rangeResolver(&calcContext{}, cellRefs, cellRanges)
+	assert.Equal(t, ErrMaxRows, err)
+
+	// Test extract value from references with invalid references
+	cellRanges.Init()
+	cellRefs.PushBack(cellRef{Col: 1, Row: 1, Sheet: "SheetN"})
+	_, err = f.rangeResolver(&calcContext{}, cellRefs, cellRanges)
+	assert.EqualError(t, err, "sheet SheetN does not exist")
+
+	cellRefs.Init()
+	cellRefs.PushBack(cellRef{Col: 1, Row: TotalRows + 1, Sheet: "SheetN"})
+	_, err = f.rangeResolver(&calcContext{}, cellRefs, cellRanges)
+	assert.Equal(t, ErrMaxRows, err)
 }
 
 func TestNestedFunctionsWithOperators(t *testing.T) {
